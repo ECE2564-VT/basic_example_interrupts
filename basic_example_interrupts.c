@@ -21,10 +21,10 @@ void Toggle_Launchpad_LED1();
 // The global variables used by the ISRs
 
 // A boolean variable that is true when a transition from "high" to "low" is sensed on S1
-bool S1modified;
+volatile bool S1modified = false;
 
 // A boolean variable that is true when Timer32 is expired
-bool TimerExpired;
+volatile bool TimerExpired = false;
 
 
 // The ISR for port 1 (all of port 1, not any specific pin)
@@ -60,10 +60,6 @@ int main(void)
 {
 
     initialize();
-
-    // We have to initialize the global variables to something reasonable
-    S1modified = false;
-    TimerExpired = false;
 
     while (1) {
         if (S1modified)
