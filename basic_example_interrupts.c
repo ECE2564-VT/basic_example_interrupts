@@ -1,5 +1,5 @@
 // This application illustrates a simple use of interrupts for both GPIO and Timer32
-// Whenever the GPIO experiences a "high" to "low" transition, it sends an interrupt
+// Whenever the GPIO experiences any transition, it sends an interrupt
 // Whenever Timer32 expires, it sends an interrupt.
 // The code is written such that whenever there is a "high" to "low" transition on S1
 // on Launchpad, the Launchpad LED1 is turned on for half a second.
@@ -8,8 +8,9 @@
 
 #include <ti/devices/msp432p4xx/driverlib/driverlib.h>
 
-// Based on system clock of 3MHz and prescaler of 1
-#define HALF_SECOND 1500000
+// Based on system clock of 3MHz and prescaler of 1, this is a 2ms wait
+// TODO: change this number to see how the debouncing behavior changes
+#define DEBOUNCE_WAIT 6000
 
 // This function initializes all the peripherals
 void initialize();
@@ -18,9 +19,13 @@ void TurnOn_Launchpad_LED1();
 void TurnOff_Launchpad_LED1();
 void Toggle_Launchpad_LED1();
 
+void TurnOn_Launchpad_LED2Blue();
+void TurnOff_Launchpad_LED2Blue();
+void Toggle_Launchpad_LED2Blue();
+
 // The global variables used by the ISRs
 
-// A boolean variable that is true when a transition from "high" to "low" is sensed on S1
+// A boolean variable that is true when a transition is sensed on S1
 volatile bool S1modified = false;
 
 // A boolean variable that is true when Timer32 is expired
@@ -28,6 +33,8 @@ volatile bool TimerExpired = false;
 
 
 // The ISR for port 1 (all of port 1, not any specific pin)
+// Hold the control key on your keyboard and click on the name of this function to see where it takes you
+// We did not choose the name of this function. Any time a port 1 interrupt happens this function is called automoatically.
 void PORT1_IRQHandler() {
 
     // In our case on only S1 (attached to Pin1) can provide interrupt.
@@ -43,7 +50,9 @@ void PORT1_IRQHandler() {
                              GPIO_PIN1);
 }
 
-void T32_INT1_IRQHandler()
+// This is also an ISR, but we picked our own name.
+// Since we picked the name, we have to register this function to become an official ISR
+void Debounce_Over()
 {
     // We use this global variable to communicate with the main
     TimerExpired = true;
@@ -62,25 +71,34 @@ int main(void)
     initialize();
 
     while (1) {
+        // Enters the Low Power Mode 0 - the processor is asleep and only responds to interrupts
+        PCM_gotoLPM0();
+
         if (S1modified)
         {
-            // If a change on S1 is sensed, we start the half-second timer and turn on the LED
-            Timer32_setCount(TIMER32_0_BASE, HALF_SECOND);
+            // If a change on S1 is sensed, we start the half-second timer
+            Timer32_setCount(TIMER32_0_BASE, DEBOUNCE_WAIT);
             Timer32_startTimer(TIMER32_0_BASE, true);
-            TurnOn_Launchpad_LED1();
+
+            // LE2 blue is on during the debouncing wait
+            TurnOn_Launchpad_LED2Blue();
 
             // It is important to revert back this boolean variable. Otherwise, next loop
             // we will again start the timer.
             S1modified = false;
         }
 
-        if (TimerExpired)
+        else if (TimerExpired)
         {
-            // Once the timer is expired, we turn off the LED
-            TurnOff_Launchpad_LED1();
+            // LE2 blue is on during the debouncing wait. We turn it off here.
+            TurnOff_Launchpad_LED2Blue();
 
             // Again, since we took action for the expired timer we should revert back the boolean flag.
             TimerExpired = false;
+
+            // Debounce wait is over and we are taking action
+            Toggle_Launchpad_LED1();
+
         }
 
     }
@@ -98,6 +116,9 @@ void initialize()
     // step 2: Initializing LED1, which is on Pin 0 of Port P1 (from page 37 of the Launchpad User Guide)
     GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);
 
+    // blue LED on Launchpad
+    GPIO_setAsOutputPin(GPIO_PORT_P2, GPIO_PIN2);
+
     // step 3: Initializing S1 (switch 1 or button 1),
     // which is on Pin1 of Port 1 (from page 37 of the Launchpad User Guide)
     GPIO_setAsInputPinWithPullUpResistor (GPIO_PORT_P1, GPIO_PIN1);
@@ -107,7 +128,7 @@ void initialize()
 
     GPIO_interruptEdgeSelect(GPIO_PORT_P1,
                              GPIO_PIN1,
-                             GPIO_HIGH_TO_LOW_TRANSITION);
+                             GPIO_HIGH_TO_LOW_TRANSITION | GPIO_LOW_TO_HIGH_TRANSITION);
 
     Interrupt_enableInterrupt(INT_PORT1);
 
@@ -116,6 +137,8 @@ void initialize()
                        TIMER32_PRESCALER_1, // The prescaler value is 1; The clock is not divided before feeding the counter
                        TIMER32_32BIT, // The counter is used in 32-bit mode; the alternative is 16-bit mode
                        TIMER32_PERIODIC_MODE); //This options is irrelevant for a one-shot timer
+
+    Timer32_registerInterrupt(INT_T32_INT1, Debounce_Over);
 
     Interrupt_enableInterrupt(INT_T32_INT1);
 
@@ -134,9 +157,21 @@ void Toggle_Launchpad_LED1()
 {
     GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
 }
-char SwitchStatus_Launchpad_Button1()
+
+void TurnOn_Launchpad_LED2Blue()
 {
-    return (GPIO_getInputPinValue(GPIO_PORT_P1, GPIO_PIN1));
+    GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN2);
 }
+
+void TurnOff_Launchpad_LED2Blue()
+{
+    GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN2);
+}
+
+void Toggle_Launchpad_LED2Blue()
+{
+    GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN2);
+}
+
 
 
