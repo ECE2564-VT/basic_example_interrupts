@@ -11,7 +11,7 @@
 #include <ti/devices/msp432p4xx/driverlib/driverlib.h>
 
 // Based on system clock of 3MHz and prescaler of 1, this is a 200ms wait
-// TODO: change this number to see how the debouncing behavior changes (try 6000, 60000, 300000, 1200000)
+// TODO: change this number to see how the debouncing behavior changes (try 300000, 1200000)
 #define DEBOUNCE_WAIT 600000
 
 // This function initializes all the peripherals
@@ -87,6 +87,8 @@ bool S1tapped()
             // It is important to revert back this boolean variable. Otherwise, next loop
             // we will again start the timer.
             S1modified = false;
+
+            tapped = true;
         }
     }
 
@@ -100,8 +102,6 @@ bool S1tapped()
 
             // Again, since we took action for the expired timer we should revert back the boolean flag.
             TimerExpired = false;
-
-            tapped = true;
 
         }
     }
@@ -141,6 +141,9 @@ void initialize()
 
     // blue LED on Launchpad
     GPIO_setAsOutputPin(GPIO_PORT_P2, GPIO_PIN2);
+
+    TurnOff_Launchpad_LED2Blue();
+    TurnOff_Launchpad_LED1();
 
     // Initializing S1 (switch 1 or button 1),
     // which is on Pin1 of Port 1 (from page 37 of the Launchpad User Guide)
