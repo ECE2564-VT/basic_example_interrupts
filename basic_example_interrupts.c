@@ -11,7 +11,7 @@
 #include <ti/devices/msp432p4xx/driverlib/driverlib.h>
 
 // Based on system clock of 3MHz and prescaler of 1, this is a 200ms wait
-// TODO: change this number to see how the debouncing behavior changes (try 6000, 60000, 300000)
+// TODO: change this number to see how the debouncing behavior changes (try 6000, 60000, 300000, 1200000)
 #define DEBOUNCE_WAIT 600000
 
 // This function initializes all the peripherals
@@ -65,38 +65,48 @@ void Debounce_Over()
 
 bool S1tapped()
 {
-    if (S1modified)
-    {
-        // If a change on S1 is sensed, we start the debounce timer
-        Timer32_setCount(TIMER32_0_BASE, DEBOUNCE_WAIT);
-        Timer32_startTimer(TIMER32_0_BASE, true);
+    // basic state variable
+    static bool debouncing = false;
 
-        // LE2 blue is on during the debouncing wait
-        // This is only for debugging purpose and for you to get a sense that the debouncing has begun
-        TurnOn_Launchpad_LED2Blue();
+    // the single output of the FMS
+    bool tapped = false;
 
-        // It is important to revert back this boolean variable. Otherwise, next loop
-        // we will again start the timer.
-        S1modified = false;
+    // if we are not in the debouncing mode
+    if (!debouncing) {
+        if (S1modified) {
 
-        // at this point we still don't say the buttons is tapped
-        return false;
+            // LE2 blue is on during the debouncing wait
+            // This is only for debugging purpose and for you to get a sense that the debouncing has begun
+            TurnOn_Launchpad_LED2Blue();
+            debouncing = true;
+
+            // We start the debounce timer
+            Timer32_setCount(TIMER32_0_BASE, DEBOUNCE_WAIT);
+            Timer32_startTimer(TIMER32_0_BASE, true);
+
+            // It is important to revert back this boolean variable. Otherwise, next loop
+            // we will again start the timer.
+            S1modified = false;
+        }
     }
 
-    else if (TimerExpired)
-    {
-        // LE2 blue is on during the debouncing wait. We turn it off here.
-        TurnOff_Launchpad_LED2Blue();
+    // if we are in debouncing
+    else {
+        if (TimerExpired)
+        {
+            // LE2 blue is on during the debouncing wait. We turn it off here.
+            TurnOff_Launchpad_LED2Blue();
+            debouncing = false;
 
-        // Again, since we took action for the expired timer we should revert back the boolean flag.
-        TimerExpired = false;
+            // Again, since we took action for the expired timer we should revert back the boolean flag.
+            TimerExpired = false;
 
-        // Debounce wait is over and we are taking action
-        return true;
+            tapped = true;
+
+        }
     }
 
-    // if none of the above the button is not tapped
-    return false;
+    return tapped;
 }
 
 void TurnOn_Launchpad_LED1();
