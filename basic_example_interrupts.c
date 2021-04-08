@@ -9,13 +9,10 @@
 // This function initializes all the peripherals
 void initialize();
 
-void TurnOn_Launchpad_LED1();
-void TurnOff_Launchpad_LED1();
-void Toggle_Launchpad_LED1();
-
-void TurnOn_Launchpad_LED2Blue();
-void TurnOff_Launchpad_LED2Blue();
-void Toggle_Launchpad_LED2Blue();
+void TurnOn_LL1();
+void TurnOff_LL1();
+void TurnOn_LLG();
+void TurnOff_LLG();
 
 // The global variables used by the ISRs
 
@@ -63,10 +60,14 @@ int main(void)
 
     while (1) {
         // Enters the Low Power Mode 0 - the processor is asleep and only responds to interrupts
+        TurnOn_LLG();
         PCM_gotoLPM0();
+        TurnOff_LLG();
 
         if (S1modifiedFlag) {
-            TurnOn_Launchpad_LED1();
+            TurnOn_LL1();
+
+            // This is important. Otherwise, the next time we enter the loop, we think there has been an interrupt
             S1modifiedFlag = false;
 
             Timer32_setCount(TIMER32_0_BASE, TIMER_WAIT);
@@ -74,7 +75,9 @@ int main(void)
         }
 
         if (TimerExpiredFlag) {
-            TurnOff_Launchpad_LED1();
+            TurnOff_LL1();
+
+            // This is important. Otherwise, we will think the timer recently expired.
             TimerExpiredFlag = false;
         }
 
@@ -82,14 +85,13 @@ int main(void)
 }
 
 void initLEDs() {
-    // Initializing LED1, which is on Pin 0 of Port P1 (from page 37 of the Launchpad User Guide)
+
     GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);
 
-    // blue LED on Launchpad
-    GPIO_setAsOutputPin(GPIO_PORT_P2, GPIO_PIN2);
+    GPIO_setAsOutputPin(GPIO_PORT_P2, GPIO_PIN1);
 
-    TurnOff_Launchpad_LED2Blue();
-    TurnOff_Launchpad_LED1();
+    TurnOff_LL1();
+    TurnOff_LLG();
 }
 
 void initLB1() {
@@ -140,34 +142,28 @@ void initialize()
     initTimer();
 }
 
-void TurnOn_Launchpad_LED1()
+void TurnOn_LL1()
 {
     GPIO_setOutputHighOnPin(GPIO_PORT_P1, GPIO_PIN0);
 }
-void TurnOff_Launchpad_LED1()
+void TurnOff_LL1()
 {
     GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN0);
 }
 
-void Toggle_Launchpad_LED1()
+// LLG
+void TurnOn_LLG()
 {
-    GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
+    GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN1);
 }
 
-void TurnOn_Launchpad_LED2Blue()
+void TurnOff_LLG()
 {
-    GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN2);
+    GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN1);
 }
 
-void TurnOff_Launchpad_LED2Blue()
-{
-    GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN2);
-}
 
-void Toggle_Launchpad_LED2Blue()
-{
-    GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN2);
-}
+
 
 
 
