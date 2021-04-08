@@ -60,6 +60,8 @@ int main(void)
 
     while (1) {
         // Enters the Low Power Mode 0 - the processor is asleep and only responds to interrupts
+        // LLG signifies asleep processor. During runtime, it appears the processor is always asleep
+        // Debugging shows that the processor does wake up, but we blink and we miss it!
         TurnOn_LLG();
         PCM_gotoLPM0();
         TurnOff_LLG();
@@ -70,6 +72,7 @@ int main(void)
             // This is important. Otherwise, the next time we enter the loop, we think there has been an interrupt
             S1modifiedFlag = false;
 
+            // start the 2-second timer. The timer is configured to give interrupts
             Timer32_setCount(TIMER32_0_BASE, TIMER_WAIT);
             Timer32_startTimer(TIMER32_0_BASE, true);
         }
