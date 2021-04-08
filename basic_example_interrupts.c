@@ -1,18 +1,10 @@
 // This application illustrates a simple use of interrupts for both GPIO and Timer32
+// A transition on LB1 turns LL1 on for about 2 seconds
 
-
-/*
- * The application implements a simple debouncing logic. Whenever a high-to-low transition is sensed on Port 1, pin 1 (connected to S1)
- * an interrupt is triggered. The ISR changes a variable called S1modified to tell the other function take further action.
- * Another function called S1tapped() starts Timer32 to wait for debouncing time. Again, when the Timer32 is expired an interrupt is
- * triggered. Another global boolean is set to true in ISR for the Timer to tell the other functions, specifically S1tapped(), that the timer has
- * expired.
- */
 #include <ti/devices/msp432p4xx/driverlib/driverlib.h>
 
-// Based on system clock of 3MHz and prescaler of 1, this is a 200ms wait
-// TODO: change this number to see how the debouncing behavior changes (try 300000, 1200000)
-#define DEBOUNCE_WAIT 600000
+// Based on system clock of 3MHz and prescaler of 1, this is a 2000ms wait
+#define TIMER_WAIT 6000000
 
 // This function initializes all the peripherals
 void initialize();
@@ -28,10 +20,10 @@ void Toggle_Launchpad_LED2Blue();
 // The global variables used by the ISRs
 
 // A boolean variable that is true when a high-to-low transition is sensed on S1
-volatile bool S1modified = false;
+volatile bool S1modifiedFlag = false;
 
 // A boolean variable that is true when Timer32 is expired
-volatile bool TimerExpired = false;
+volatile bool TimerExpiredFlag = false;
 
 
 // The ISR for port 1 (all of port 1, not any specific pin)
@@ -44,7 +36,7 @@ void PORT1_IRQHandler() {
     // to make sure what pin created the interrupt
     if (GPIO_getInterruptStatus(GPIO_PORT_P1,
                                 GPIO_PIN1))
-        S1modified = true;
+        S1modifiedFlag = true;
 
     // The very critical step to make sure once we leave ISR, we don't come back to ISR again.
     // This tells the GPIO, the CPU has heard the interrupt and it should clear it.
@@ -54,105 +46,15 @@ void PORT1_IRQHandler() {
 
 // This is also an ISR, but we picked our own name.
 // Since we picked the name, we have to register this function to become an official ISR
-void Debounce_Over()
+void TimerExpired()
 {
     // We use this global variable to communicate with the main
-    TimerExpired = true;
+    TimerExpiredFlag = true;
 
     // We tell the Timer32 to remove the interrupt as we already handled it.
     Timer32_clearInterruptFlag(TIMER32_0_BASE);
 }
 
-//bool S1tapped()
-//{
-//    // basic state variable
-//    static bool debouncing = false;
-//
-//    // the single output of the FMS
-//    bool tapped = false;
-//
-//    if (debouncing && TimerExpired)
-//    {
-//        // LE2 blue is on during the debouncing wait. We turn it off here.
-//        TurnOff_Launchpad_LED2Blue();
-//        debouncing = false;
-//
-//        // Again, since we took action for the expired timer we should revert back the boolean flag.
-//        TimerExpired = false;
-//
-//    }
-//
-//
-//    // if we are not in the debouncing mode
-//    if (!debouncing && S1modified) {
-//
-//        // LE2 blue is on during the debouncing wait
-//        // This is only for debugging purpose and for you to get a sense that the debouncing has begun
-//        TurnOn_Launchpad_LED2Blue();
-//        debouncing = true;
-//
-//        // We start the debounce timer
-//        Timer32_setCount(TIMER32_0_BASE, DEBOUNCE_WAIT);
-//        Timer32_startTimer(TIMER32_0_BASE, true);
-//
-//        // It is important to revert back this boolean variable. Otherwise, next loop
-//        // we will again start the timer.
-//        S1modified = false;
-//
-//        tapped = true;
-//    }
-//
-//    return tapped;
-//}
-bool S1tapped()
-{
-    // basic state variable
-    static bool debouncing = false;
-
-    // the single output of the FMS
-    bool tapped = false;
-
-    // if we are not in the debouncing mode
-    if (!debouncing) {
-        if (S1modified) {
-
-            // LE2 blue is on during the debouncing wait
-            // This is only for debugging purpose and for you to get a sense that the debouncing has begun
-            TurnOn_Launchpad_LED2Blue();
-            debouncing = true;
-
-            // We start the debounce timer
-            Timer32_setCount(TIMER32_0_BASE, DEBOUNCE_WAIT);
-            Timer32_startTimer(TIMER32_0_BASE, true);
-
-            // It is important to revert back this boolean variable. Otherwise, next loop
-            // we will again start the timer.
-            S1modified = false;
-
-            tapped = true;
-        }
-    }
-
-    // if we are in debouncing
-    else {
-        if (TimerExpired)
-        {
-            // LE2 blue is on during the debouncing wait. We turn it off here.
-            TurnOff_Launchpad_LED2Blue();
-            debouncing = false;
-
-            // Again, since we took action for the expired timer we should revert back the boolean flag.
-            TimerExpired = false;
-
-        }
-    }
-
-    return tapped;
-}
-
-void TurnOn_Launchpad_LED1();
-void TurnOff_Launchpad_LED1();
-char SwitchStatus_Launchpad_Button1();
 
 int main(void)
 {
@@ -163,8 +65,19 @@ int main(void)
         // Enters the Low Power Mode 0 - the processor is asleep and only responds to interrupts
         PCM_gotoLPM0();
 
-        if (S1tapped())
-            Toggle_Launchpad_LED1();
+        if (S1modifiedFlag) {
+            TurnOn_Launchpad_LED1();
+            S1modifiedFlag = false;
+
+            Timer32_setCount(TIMER32_0_BASE, TIMER_WAIT);
+            Timer32_startTimer(TIMER32_0_BASE, true);
+        }
+
+        if (TimerExpiredFlag) {
+            TurnOff_Launchpad_LED1();
+            TimerExpiredFlag = false;
+        }
+
     }
 }
 
@@ -208,8 +121,8 @@ void initTimer(){
                        TIMER32_32BIT, // The counter is used in 32-bit mode; the alternative is 16-bit mode
                        TIMER32_PERIODIC_MODE); //This options is irrelevant for a one-shot timer
 
-    // register the Debounce_over() function as the ISR for Timer32_0
-    Timer32_registerInterrupt(INT_T32_INT1, Debounce_Over);
+    // register the TimerExpired() function as the ISR for Timer32_0
+    Timer32_registerInterrupt(INT_T32_INT1, TimerExpired);
 
     Timer32_clearInterruptFlag(TIMER32_0_BASE);
 
