@@ -49,7 +49,7 @@ void PORT1_IRQHandler() {
     // The very critical step to make sure once we leave ISR, we don't come back to ISR again.
     // This tells the GPIO, the CPU has heard the interrupt and it should clear it.
     GPIO_clearInterruptFlag(GPIO_PORT_P1,
-                             GPIO_PIN1);
+                            GPIO_PIN1);
 }
 
 // This is also an ISR, but we picked our own name.
@@ -63,6 +63,47 @@ void Debounce_Over()
     Timer32_clearInterruptFlag(TIMER32_0_BASE);
 }
 
+//bool S1tapped()
+//{
+//    // basic state variable
+//    static bool debouncing = false;
+//
+//    // the single output of the FMS
+//    bool tapped = false;
+//
+//    if (debouncing && TimerExpired)
+//    {
+//        // LE2 blue is on during the debouncing wait. We turn it off here.
+//        TurnOff_Launchpad_LED2Blue();
+//        debouncing = false;
+//
+//        // Again, since we took action for the expired timer we should revert back the boolean flag.
+//        TimerExpired = false;
+//
+//    }
+//
+//
+//    // if we are not in the debouncing mode
+//    if (!debouncing && S1modified) {
+//
+//        // LE2 blue is on during the debouncing wait
+//        // This is only for debugging purpose and for you to get a sense that the debouncing has begun
+//        TurnOn_Launchpad_LED2Blue();
+//        debouncing = true;
+//
+//        // We start the debounce timer
+//        Timer32_setCount(TIMER32_0_BASE, DEBOUNCE_WAIT);
+//        Timer32_startTimer(TIMER32_0_BASE, true);
+//
+//        // It is important to revert back this boolean variable. Otherwise, next loop
+//        // we will again start the timer.
+//        S1modified = false;
+//
+//        tapped = true;
+//    }
+//
+//    return tapped;
+//}
 bool S1tapped()
 {
     // basic state variable
@@ -127,15 +168,7 @@ int main(void)
     }
 }
 
-
-// Initialization part is always device dependent and therefore does not change much with HAL
-void initialize()
-{
-
-    // Stop watchdog timer
-    // We do this at the beginning of all our programs for now.Later we learn more about it.
-    WDT_A_hold(WDT_A_BASE);
-
+void initLEDs() {
     // Initializing LED1, which is on Pin 0 of Port P1 (from page 37 of the Launchpad User Guide)
     GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);
 
@@ -144,10 +177,15 @@ void initialize()
 
     TurnOff_Launchpad_LED2Blue();
     TurnOff_Launchpad_LED1();
+}
 
+void initLB1() {
     // Initializing S1 (switch 1 or button 1),
     // which is on Pin1 of Port 1 (from page 37 of the Launchpad User Guide)
     GPIO_setAsInputPinWithPullUpResistor (GPIO_PORT_P1, GPIO_PIN1);
+
+    GPIO_clearInterruptFlag(GPIO_PORT_P1,
+                            GPIO_PIN1);
 
     // enable interrupt on port 1, pin 1
     GPIO_enableInterrupt(GPIO_PORT_P1,
@@ -161,6 +199,9 @@ void initialize()
     // enable the port 1 interrupt
     Interrupt_enableInterrupt(INT_PORT1);
 
+}
+
+void initTimer(){
     // Initialize the timers needed for debouncing
     Timer32_initModule(TIMER32_0_BASE, // There are two timers, we are using the one with the index 0
                        TIMER32_PRESCALER_1, // The prescaler value is 1; The clock is not divided before feeding the counter
@@ -170,8 +211,20 @@ void initialize()
     // register the Debounce_over() function as the ISR for Timer32_0
     Timer32_registerInterrupt(INT_T32_INT1, Debounce_Over);
 
+    Timer32_clearInterruptFlag(TIMER32_0_BASE);
+
     Interrupt_enableInterrupt(INT_T32_INT1);
 
+}
+
+void initialize()
+{
+
+    WDT_A_hold(WDT_A_BASE);
+
+    initLEDs();
+    initLB1();
+    initTimer();
 }
 
 void TurnOn_Launchpad_LED1()
